@@ -39,7 +39,7 @@ ATTEND_CB_DATA = "attend"
 def _attend_keyboard(enabled: bool) -> InlineKeyboardMarkup | None:
     if not enabled:
         return None
-    return InlineKeyboardMarkup([[InlineKeyboardButton("/attend", callback_data=ATTEND_CB_DATA)]])
+    return InlineKeyboardMarkup([[InlineKeyboardButton("출석", callback_data=ATTEND_CB_DATA)]])
 
 
 async def _reply_alert(update: Update, text: str) -> None:
@@ -334,7 +334,7 @@ async def session_open(app: Application) -> None:
     open_text = render_session_open(config.SESSION_START_HOUR, config.SESSION_END_HOUR)
     await app.bot.send_message(chat_id=chat_id, text=open_text)
 
-    progress = render_attendance_progress([], config.MAX_ATTENDEES, include_attend_cta=True)
+    progress = render_attendance_progress([], config.MAX_ATTENDEES, include_attend_cta=False)
     sent = await app.bot.send_message(
         chat_id=chat_id,
         text=progress.text,

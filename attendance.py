@@ -96,7 +96,7 @@ class AttendanceService:
 
             attendees = await list_attendances(self.db_path, session.id)
             names = [a.user_name for a in attendees]
-            render = render_attendance_progress(names, MAX_ATTENDEES, include_attend_cta=True)
+            render = render_attendance_progress(names, MAX_ATTENDEES, include_attend_cta=False)
 
             if render.is_complete:
                 await update_session_status(self.db_path, session.id, "completed")
@@ -114,6 +114,6 @@ class AttendanceService:
             return None, None
         attendees = await list_attendances(self.db_path, session.id)
         names = [a.user_name for a in attendees]
-        render = render_attendance_progress(names, MAX_ATTENDEES, include_attend_cta=True)
+        render = render_attendance_progress(names, MAX_ATTENDEES, include_attend_cta=False)
         return session, render
 
