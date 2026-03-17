@@ -78,6 +78,7 @@ python bot.py
 
 - `/attend`: 출석 처리 (시간 내/중복/완료 여부에 따라 안내)
 - `/status`: 현재 출석 현황 메시지를 다시 보여줌 (개발/점검용)
+- `/guide`: 출석체크 사용법/시간/안내 문구 보기
 
 ## 메시지 동작
 
@@ -106,3 +107,28 @@ DB 파일은 기본적으로 `data/attendance.db`에 생성됩니다.
 
 - 봇을 단체방에 초대 후 **메시지 전송/편집 권한**이 있는지 확인하세요.
 - 서버 배포 시 프로세스가 항상 살아있어야 스케줄이 동작합니다. (예: systemd, Docker, pm2 등)
+
+## 테스트 모드 (DEV_MODE)
+
+스케줄을 기다리지 않고 end-to-end로 메시지 edit/출석 흐름을 확인하려면 아래를 사용하세요.
+
+### 활성화
+
+```bash
+export DEV_MODE="1"
+```
+
+### 테스트 흐름
+
+1) 세션 열기: `/open`  
+2) 출석: `/attend`  
+3) 세션 닫기: `/close`
+
+> `DEV_MODE=1`에서는 출석 시간 제한을 무시합니다. 운영 시에는 `DEV_MODE`를 제거하거나 `0`으로 두세요.
+
+## Railway 배포 메모 (SQLite + Volume)
+
+SQLite를 영속적으로 쓰려면 Railway에서 **Volume을 서비스에 Attach** 하고 `DB_PATH`를 mount 경로로 설정하세요.
+
+- **Mount path 예시**: `/data`
+- **Variables 예시**: `DB_PATH=/data/attendance.db`

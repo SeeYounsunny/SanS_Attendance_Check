@@ -19,7 +19,7 @@ from database import (
     update_session_message_id,
     update_session_status,
 )
-from messages import render_attendance_progress, render_session_open
+from messages import render_attendance_progress, render_guide, render_session_open
 from scheduler import build_scheduler
 
 
@@ -143,6 +143,20 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     await update.message.reply_text(render.text, reply_markup=_attend_keyboard(not render.is_complete))
 
 
+async def cmd_guide(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    text = render_guide(
+        timezone=config.TIMEZONE,
+        start_hour=config.SESSION_START_HOUR,
+        end_hour=config.SESSION_END_HOUR,
+        open_hour=config.SESSION_OPEN_HOUR,
+        open_minute=config.SESSION_OPEN_MINUTE,
+        max_attendees=config.MAX_ATTENDEES,
+        dev_mode=config.DEV_MODE,
+    )
+    if update.message:
+        await update.message.reply_text(text)
+
+
 async def cmd_open(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not config.DEV_MODE:
         return
@@ -232,6 +246,7 @@ def main() -> None:
     app.add_handler(CommandHandler("attend", cmd_attend))
     app.add_handler(CallbackQueryHandler(cb_attend, pattern=f"^{ATTEND_CB_DATA}$"))
     app.add_handler(CommandHandler("status", cmd_status))
+    app.add_handler(CommandHandler("guide", cmd_guide))
     app.add_handler(CommandHandler("open", cmd_open))
     app.add_handler(CommandHandler("close", cmd_close))
 

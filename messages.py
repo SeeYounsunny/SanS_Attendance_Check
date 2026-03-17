@@ -41,3 +41,32 @@ def render_attendance_progress(
         lines.append("/attend")
     return MessageRender(text="\n".join(lines), is_complete=False)
 
+
+def render_guide(
+    *,
+    timezone: str,
+    start_hour: int,
+    end_hour: int,
+    open_hour: int,
+    open_minute: int,
+    max_attendees: int,
+    dev_mode: bool,
+) -> str:
+    time_line = f"일요일 {open_hour:02d}:{open_minute:02d} ~ {end_hour:02d}:00 ({timezone})"
+    if dev_mode:
+        time_line = f"{time_line}\n(DEV_MODE=1: 시간 제한 없이 테스트 가능)"
+
+    return (
+        "📌 출석체크 사용법\n\n"
+        f"- 출석 가능 시간: {time_line}\n"
+        f"- 목표 인원: {max_attendees}명\n\n"
+        "✅ 출석하기\n"
+        "- 단체방에서 `/attend` 입력 또는 출석 메시지의 버튼을 클릭하세요.\n\n"
+        "📋 현황 보기\n"
+        "- `/status` 로 현재 출석 현황을 다시 볼 수 있어요.\n\n"
+        "ℹ️ 안내 메시지\n"
+        "- 시간 외: `출석 시간이 아닙니다.`\n"
+        "- 중복: `이미 출석 처리되었습니다.`\n"
+        "- 완료 후: `출석이 이미 완료되었습니다.`\n"
+    )
+
