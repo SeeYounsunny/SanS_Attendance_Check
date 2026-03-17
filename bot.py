@@ -143,6 +143,22 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     await update.message.reply_text(render.text, reply_markup=_attend_keyboard(not render.is_complete))
 
 
+async def cmd_open(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not config.DEV_MODE:
+        return
+    await session_open(context.application)
+    if update.message:
+        await update.message.reply_text("세션을 열었습니다. 이제 /attend 로 테스트해 보세요.")
+
+
+async def cmd_close(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not config.DEV_MODE:
+        return
+    await session_close(context.application)
+    if update.message:
+        await update.message.reply_text("세션을 종료했습니다.")
+
+
 async def session_open(app: Application) -> None:
     chat_id = config.GROUP_CHAT_ID
     now = _utc_now()
@@ -216,6 +232,8 @@ def main() -> None:
     app.add_handler(CommandHandler("attend", cmd_attend))
     app.add_handler(CallbackQueryHandler(cb_attend, pattern=f"^{ATTEND_CB_DATA}$"))
     app.add_handler(CommandHandler("status", cmd_status))
+    app.add_handler(CommandHandler("open", cmd_open))
+    app.add_handler(CommandHandler("close", cmd_close))
 
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 

@@ -29,3 +29,8 @@ TIMEZONE = _get_env("TIMEZONE", "Asia/Seoul") or "Asia/Seoul"
 # Storage
 DB_PATH = _get_env("DB_PATH", "data/attendance.db") or "data/attendance.db"
 
+# Dev/test mode
+# - When enabled, attendance time window check is bypassed.
+# - Allows manual /open and /close commands for testing.
+DEV_MODE = (_get_env("DEV_MODE", "0") or "0").lower() in {"1", "true", "yes", "y", "on"}
+

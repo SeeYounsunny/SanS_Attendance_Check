@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from config import (
+    DEV_MODE,
     MAX_ATTENDEES,
     SESSION_DAY,
     SESSION_END_HOUR,
@@ -38,6 +39,8 @@ def is_within_attendance_window(now: datetime) -> bool:
     Attendance is allowed in [open_time, end_time).
     PRD: Sunday 20:30 ~ 23:00.
     """
+    if DEV_MODE:
+        return True
     local = now.astimezone(SEOUL)
     if local.weekday() != SESSION_DAY:
         return False
