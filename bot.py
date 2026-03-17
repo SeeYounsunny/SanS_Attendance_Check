@@ -35,6 +35,8 @@ logger = logging.getLogger("attendance-bot")
 
 ATTEND_CB_DATA = "attend"
 
+MEMBER_CACHE_TTL_SEC = 300
+
 
 def _attend_keyboard(enabled: bool) -> InlineKeyboardMarkup | None:
     if not enabled:
@@ -107,7 +109,57 @@ def _month_range(d: date) -> tuple[date, date]:
     return start, end
 
 
+def _now_ts() -> float:
+    return datetime.utcnow().timestamp()
+
+
+async def _is_group_member_cached(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """
+    Returns True if user is a member/admin/creator of configured GROUP_CHAT_ID.
+    Cached for a short TTL to avoid excessive API calls.
+    """
+    u = update.effective_user
+    if not u:
+        return False
+
+    cache: dict[int, tuple[float, bool]] = context.application.bot_data.setdefault("member_cache", {})
+    ts = _now_ts()
+    cached = cache.get(u.id)
+    if cached and (ts - cached[0]) < MEMBER_CACHE_TTL_SEC:
+        return cached[1]
+
+    try:
+        member = await context.bot.get_chat_member(chat_id=config.GROUP_CHAT_ID, user_id=u.id)
+        ok = member.status in {"member", "administrator", "creator"}
+    except TelegramError as e:
+        logger.warning("get_chat_member failed user_id=%s err=%s", u.id, e)
+        ok = False
+
+    cache[u.id] = (ts, ok)
+    return ok
+
+
+async def _require_allowed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """
+    Access control:
+    - Commands are allowed only for members of GROUP_CHAT_ID.
+    - In group chats: also require the chat itself to be GROUP_CHAT_ID.
+    """
+    chat = update.effective_chat
+    if chat and chat.type in {"group", "supergroup"} and chat.id != config.GROUP_CHAT_ID:
+        await _reply_alert(update, "이 봇은 지정된 단체방에서만 사용할 수 있어요.")
+        return False
+
+    if not await _is_group_member_cached(update, context):
+        await _reply_alert(update, "이 봇은 SanS 1조 단체방 멤버만 사용할 수 있어요.")
+        return False
+
+    return True
+
+
 async def cmd_attend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _require_allowed(update, context):
+        return
     svc: AttendanceService | None = context.application.bot_data.get("attendance_service")
     if svc is None:
         logger.error("attendance_service not initialized (startup hook not run?)")
@@ -152,6 +204,8 @@ async def cb_attend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _require_allowed(update, context):
+        return
     svc: AttendanceService | None = context.application.bot_data.get("attendance_service")
     if svc is None:
         await update.message.reply_text("봇 초기화가 아직 완료되지 않았습니다. 잠시 후 다시 시도해 주세요.")
@@ -164,6 +218,8 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 
 async def cmd_guide(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _require_allowed(update, context):
+        return
     text = render_guide(
         timezone=config.TIMEZONE,
         start_hour=config.SESSION_START_HOUR,
@@ -178,6 +234,8 @@ async def cmd_guide(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _require_allowed(update, context):
+        return
     today = _local_today()
 
     # Recent 4 sessions (by session date)
@@ -230,6 +288,8 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def cmd_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _require_allowed(update, context):
+        return
     args = (context.args or [])
     mode = (args[0].strip().lower() if args else "week")
     if mode not in {"week", "month"}:
@@ -267,6 +327,8 @@ async def cmd_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 
 async def cmd_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _require_allowed(update, context):
+        return
     if not context.args:
         await update.message.reply_text("사용법: /search <이름 일부>\n예: /search 홍길동")
         return
@@ -287,6 +349,8 @@ async def cmd_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 
 async def cmd_top10(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _require_allowed(update, context):
+        return
     args = (context.args or [])
     mode = (args[0].strip().lower() if args else "year")
     if mode not in {"month", "year"}:
@@ -310,6 +374,8 @@ async def cmd_top10(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("\n".join(lines))
 
 async def cmd_open(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _require_allowed(update, context):
+        return
     if not config.DEV_MODE:
         return
     await session_open(context.application)
@@ -318,6 +384,8 @@ async def cmd_open(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def cmd_close(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _require_allowed(update, context):
+        return
     if not config.DEV_MODE:
         return
     await session_close(context.application)
