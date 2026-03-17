@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# local database / data
+data/
+
+# editor
+.cursor/
+.vscode/
