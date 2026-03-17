@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
@@ -15,6 +15,12 @@ from attendance import AttendanceService, format_display_name, week_date_for
 from database import (
     get_active_session,
     init_db,
+    list_attendances_for_sessions,
+    list_monthly_attendance_counts,
+    list_sessions_between,
+    list_sessions_recent,
+    top_attendees_between,
+    count_user_attendances_between,
     upsert_session_active,
     update_session_message_id,
     update_session_status,
@@ -87,6 +93,20 @@ def _utc_now() -> datetime:
     return datetime.utcnow().replace(tzinfo=ZoneInfo("UTC"))
 
 
+def _local_today() -> date:
+    return datetime.now(tz=ZoneInfo(config.TIMEZONE)).date()
+
+
+def _month_range(d: date) -> tuple[date, date]:
+    start = d.replace(day=1)
+    if start.month == 12:
+        next_month = start.replace(year=start.year + 1, month=1)
+    else:
+        next_month = start.replace(month=start.month + 1)
+    end = next_month - timedelta(days=1)
+    return start, end
+
+
 async def cmd_attend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     svc: AttendanceService | None = context.application.bot_data.get("attendance_service")
     if svc is None:
@@ -156,6 +176,138 @@ async def cmd_guide(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message:
         await update.message.reply_text(text)
 
+
+async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    today = _local_today()
+
+    # Recent 4 sessions (by session date)
+    recent_sessions = await list_sessions_recent(config.DB_PATH, limit=4, offset=0)
+    recent_sessions_sorted = list(reversed(recent_sessions))  # oldest -> newest
+    attendance_map = await list_attendances_for_sessions(config.DB_PATH, [s.id for s in recent_sessions_sorted])
+
+    lines: list[str] = ["📊 출석 통계"]
+
+    if recent_sessions_sorted:
+        lines.append("")
+        lines.append("🗓️ 최근 4회 세션 참석자 수")
+        for s in recent_sessions_sorted:
+            lines.append(f"- {s.week_date}: {len(attendance_map.get(s.id, []))}명")
+    else:
+        lines.append("")
+        lines.append("🗓️ 최근 4회 세션: 데이터가 없습니다.")
+
+    # Last 12 months monthly totals
+    start_12m = (today.replace(day=1) - timedelta(days=365)).replace(day=1)
+    end_12m = today
+    monthly = await list_monthly_attendance_counts(config.DB_PATH, start_month=start_12m, end_month=end_12m)
+
+    sessions_12m = await list_sessions_between(config.DB_PATH, start_12m, end_12m)
+    attend_12m_map = await list_attendances_for_sessions(config.DB_PATH, [s.id for s in sessions_12m])
+    total_att_12m = sum(len(attend_12m_map.get(s.id, [])) for s in sessions_12m)
+    avg_per_session_12m = (total_att_12m / len(sessions_12m)) if sessions_12m else 0.0
+
+    lines.append("")
+    lines.append("📅 최근 12개월 월별 참석(합계)")
+    if monthly:
+        for ym, cnt in monthly[-12:]:
+            lines.append(f"- {ym}: {cnt}명")
+    else:
+        lines.append("- 데이터가 없습니다.")
+
+    lines.append("")
+    lines.append(f"📈 월 평균(최근 12개월, 세션당): {avg_per_session_12m:.2f}명")
+
+    # Year stats (recent 365 days)
+    start_1y = today - timedelta(days=365)
+    sessions_1y = await list_sessions_between(config.DB_PATH, start_1y, today)
+    attend_1y_map = await list_attendances_for_sessions(config.DB_PATH, [s.id for s in sessions_1y])
+    total_att_1y = sum(len(attend_1y_map.get(s.id, [])) for s in sessions_1y)
+    avg_per_session_1y = (total_att_1y / len(sessions_1y)) if sessions_1y else 0.0
+    lines.append(f"📈 연 평균(최근 1년, 세션당): {avg_per_session_1y:.2f}명")
+
+    if update.message:
+        await update.message.reply_text("\n".join(lines))
+
+
+async def cmd_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    args = (context.args or [])
+    mode = (args[0].strip().lower() if args else "week")
+    if mode not in {"week", "month"}:
+        mode = "week"
+
+    if mode == "week":
+        sessions = await list_sessions_recent(config.DB_PATH, limit=2, offset=0)
+        if len(sessions) < 2:
+            await update.message.reply_text("지난주 세션 데이터가 없습니다.")
+            return
+        target = sessions[1]  # newest is [0], previous is [1]
+        att_map = await list_attendances_for_sessions(config.DB_PATH, [target.id])
+        names = [a.user_name for a in att_map.get(target.id, [])]
+        text = render_attendance_progress(names, config.MAX_ATTENDEES, include_attend_cta=False).text
+        await update.message.reply_text(f"🗓️ 지난주 출석 현황 ({target.week_date})\n\n{text}")
+        return
+
+    # mode == "month" (previous calendar month)
+    today = _local_today()
+    first_this_month = today.replace(day=1)
+    prev_month_end = first_this_month - timedelta(days=1)
+    prev_start, prev_end = _month_range(prev_month_end)
+    sessions = await list_sessions_between(config.DB_PATH, prev_start, prev_end)
+    if not sessions:
+        await update.message.reply_text("지난달 세션 데이터가 없습니다.")
+        return
+    att_map = await list_attendances_for_sessions(config.DB_PATH, [s.id for s in sessions])
+    lines: list[str] = [f"📅 지난달 출석 현황 ({prev_start:%Y-%m})", ""]
+    for s in sessions:
+        names = [a.user_name for a in att_map.get(s.id, [])]
+        lines.append(f"- {s.week_date}: {len(names)}명")
+        if names:
+            lines.append("  " + ", ".join(names))
+    await update.message.reply_text("\n".join(lines))
+
+
+async def cmd_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not context.args:
+        await update.message.reply_text("사용법: /search <이름 일부>\n예: /search 홍길동")
+        return
+    q = " ".join(context.args).strip()
+    today = _local_today()
+    start_30 = today - timedelta(days=30)
+    start_365 = today - timedelta(days=365)
+
+    s30, a30 = await count_user_attendances_between(config.DB_PATH, q, start_30, today)
+    s365, a365 = await count_user_attendances_between(config.DB_PATH, q, start_365, today)
+
+    text = (
+        f"🔎 출석 검색: `{q}`\n\n"
+        f"- 최근 30일: {s30}회 세션 / {a30}건 출석\n"
+        f"- 최근 1년: {s365}회 세션 / {a365}건 출석"
+    )
+    await update.message.reply_text(text)
+
+
+async def cmd_top10(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    args = (context.args or [])
+    mode = (args[0].strip().lower() if args else "year")
+    if mode not in {"month", "year"}:
+        mode = "year"
+
+    today = _local_today()
+    if mode == "month":
+        start = today - timedelta(days=30)
+        title = "🏆 출석 TOP10 (최근 30일)"
+    else:
+        start = today - timedelta(days=365)
+        title = "🏆 출석 TOP10 (최근 1년)"
+
+    rows = await top_attendees_between(config.DB_PATH, start, today, limit=10)
+    if not rows:
+        await update.message.reply_text("데이터가 없습니다.")
+        return
+    lines = [title, ""]
+    for i, r in enumerate(rows, start=1):
+        lines.append(f"{i}. {r.user_name} — {r.attendee_count}회")
+    await update.message.reply_text("\n".join(lines))
 
 async def cmd_open(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not config.DEV_MODE:
@@ -247,6 +399,10 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(cb_attend, pattern=f"^{ATTEND_CB_DATA}$"))
     app.add_handler(CommandHandler("status", cmd_status))
     app.add_handler(CommandHandler("guide", cmd_guide))
+    app.add_handler(CommandHandler("stats", cmd_stats))
+    app.add_handler(CommandHandler("history", cmd_history))
+    app.add_handler(CommandHandler("search", cmd_search))
+    app.add_handler(CommandHandler("top10", cmd_top10))
     app.add_handler(CommandHandler("open", cmd_open))
     app.add_handler(CommandHandler("close", cmd_close))
 

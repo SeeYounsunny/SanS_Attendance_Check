@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 import aiosqlite
@@ -25,6 +25,19 @@ class AttendanceRow:
     user_name: str
     attend_order: int
     attended_at: str
+
+
+@dataclass(frozen=True)
+class SessionCountRow:
+    week_date: str
+    session_id: int
+    attendee_count: int
+
+
+@dataclass(frozen=True)
+class NameCountRow:
+    user_name: str
+    attendee_count: int
 
 
 SCHEMA_SQL = """
@@ -167,6 +180,204 @@ async def list_attendances(db_path: str, session_id: int) -> list[AttendanceRow]
             )
             for r in rows
         ]
+
+
+async def list_sessions_recent(db_path: str, limit: int, offset: int = 0) -> list[SessionRow]:
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """
+            SELECT id, week_date, status, message_id, created_at
+            FROM sessions
+            ORDER BY week_date DESC
+            LIMIT ? OFFSET ?
+            """,
+            (limit, offset),
+        )
+        rows = await cur.fetchall()
+        await cur.close()
+        return [
+            SessionRow(
+                id=r["id"],
+                week_date=r["week_date"],
+                status=r["status"],
+                message_id=r["message_id"],
+                created_at=r["created_at"],
+            )
+            for r in rows
+        ]
+
+
+async def list_sessions_between(db_path: str, start_date: date, end_date: date) -> list[SessionRow]:
+    """
+    Inclusive start_date, inclusive end_date.
+    """
+    start_s = start_date.isoformat()
+    end_s = end_date.isoformat()
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """
+            SELECT id, week_date, status, message_id, created_at
+            FROM sessions
+            WHERE week_date BETWEEN ? AND ?
+            ORDER BY week_date ASC
+            """,
+            (start_s, end_s),
+        )
+        rows = await cur.fetchall()
+        await cur.close()
+        return [
+            SessionRow(
+                id=r["id"],
+                week_date=r["week_date"],
+                status=r["status"],
+                message_id=r["message_id"],
+                created_at=r["created_at"],
+            )
+            for r in rows
+        ]
+
+
+async def list_session_counts_between(db_path: str, start_date: date, end_date: date) -> list[SessionCountRow]:
+    start_s = start_date.isoformat()
+    end_s = end_date.isoformat()
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """
+            SELECT s.week_date AS week_date, s.id AS session_id, COUNT(a.id) AS attendee_count
+            FROM sessions s
+            LEFT JOIN attendances a ON a.session_id = s.id
+            WHERE s.week_date BETWEEN ? AND ?
+            GROUP BY s.id
+            ORDER BY s.week_date ASC
+            """,
+            (start_s, end_s),
+        )
+        rows = await cur.fetchall()
+        await cur.close()
+        return [
+            SessionCountRow(
+                week_date=r["week_date"],
+                session_id=r["session_id"],
+                attendee_count=int(r["attendee_count"]),
+            )
+            for r in rows
+        ]
+
+
+async def list_monthly_attendance_counts(db_path: str, start_month: date, end_month: date) -> list[tuple[str, int]]:
+    """
+    Returns list of (YYYY-MM, count) for attendances whose attended_at is within [start_month, end_month] months.
+    """
+    start_s = start_month.isoformat()
+    end_s = end_month.isoformat()
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """
+            SELECT strftime('%Y-%m', s.week_date) AS ym, COUNT(a.id) AS attendee_count
+            FROM sessions s
+            LEFT JOIN attendances a ON a.session_id = s.id
+            WHERE s.week_date BETWEEN ? AND ?
+            GROUP BY ym
+            ORDER BY ym ASC
+            """,
+            (start_s, end_s),
+        )
+        rows = await cur.fetchall()
+        await cur.close()
+        return [(r["ym"], int(r["attendee_count"])) for r in rows]
+
+
+async def list_attendances_for_sessions(db_path: str, session_ids: list[int]) -> dict[int, list[AttendanceRow]]:
+    if not session_ids:
+        return {}
+    placeholders = ",".join(["?"] * len(session_ids))
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            f"""
+            SELECT id, session_id, user_id, user_name, attend_order, attended_at
+            FROM attendances
+            WHERE session_id IN ({placeholders})
+            ORDER BY session_id ASC, attend_order ASC
+            """,
+            tuple(session_ids),
+        )
+        rows = await cur.fetchall()
+        await cur.close()
+        out: dict[int, list[AttendanceRow]] = {}
+        for r in rows:
+            row = AttendanceRow(
+                id=r["id"],
+                session_id=r["session_id"],
+                user_id=r["user_id"],
+                user_name=r["user_name"],
+                attend_order=r["attend_order"],
+                attended_at=r["attended_at"],
+            )
+            out.setdefault(row.session_id, []).append(row)
+        return out
+
+
+async def count_user_attendances_between(
+    db_path: str,
+    name_query: str,
+    start_date: date,
+    end_date: date,
+) -> tuple[int, int]:
+    """
+    Returns (sessions_attended, total_attendances).
+    Name matching is case-insensitive LIKE against stored user_name.
+    """
+    start_s = start_date.isoformat()
+    end_s = end_date.isoformat()
+    q = f"%{name_query.strip()}%"
+    async with aiosqlite.connect(db_path) as db:
+        cur = await db.execute(
+            """
+            SELECT COUNT(DISTINCT s.id) AS session_cnt, COUNT(a.id) AS attendance_cnt
+            FROM attendances a
+            JOIN sessions s ON s.id = a.session_id
+            WHERE s.week_date BETWEEN ? AND ?
+              AND lower(a.user_name) LIKE lower(?)
+            """,
+            (start_s, end_s, q),
+        )
+        row = await cur.fetchone()
+        await cur.close()
+        if not row:
+            return 0, 0
+        return int(row[0]), int(row[1])
+
+
+async def top_attendees_between(
+    db_path: str,
+    start_date: date,
+    end_date: date,
+    limit: int = 10,
+) -> list[NameCountRow]:
+    start_s = start_date.isoformat()
+    end_s = end_date.isoformat()
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """
+            SELECT a.user_name AS user_name, COUNT(a.id) AS attendee_count
+            FROM attendances a
+            JOIN sessions s ON s.id = a.session_id
+            WHERE s.week_date BETWEEN ? AND ?
+            GROUP BY a.user_name
+            ORDER BY attendee_count DESC, user_name ASC
+            LIMIT ?
+            """,
+            (start_s, end_s, limit),
+        )
+        rows = await cur.fetchall()
+        await cur.close()
+        return [NameCountRow(user_name=r["user_name"], attendee_count=int(r["attendee_count"])) for r in rows]
 
 
 async def count_attendances(db_path: str, session_id: int) -> int:
