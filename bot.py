@@ -88,7 +88,11 @@ def _utc_now() -> datetime:
 
 
 async def cmd_attend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    svc: AttendanceService = context.application.bot_data["attendance_service"]
+    svc: AttendanceService | None = context.application.bot_data.get("attendance_service")
+    if svc is None:
+        logger.error("attendance_service not initialized (startup hook not run?)")
+        await _reply_alert(update, "봇 초기화가 아직 완료되지 않았습니다. 잠시 후 다시 시도해 주세요.")
+        return
     chat_id = config.GROUP_CHAT_ID
 
     u = update.effective_user
@@ -128,7 +132,10 @@ async def cb_attend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    svc: AttendanceService = context.application.bot_data["attendance_service"]
+    svc: AttendanceService | None = context.application.bot_data.get("attendance_service")
+    if svc is None:
+        await update.message.reply_text("봇 초기화가 아직 완료되지 않았습니다. 잠시 후 다시 시도해 주세요.")
+        return
     session, render = await svc.get_current_render()
     if not session or not render:
         await update.message.reply_text("현재 활성화된 세션이 없습니다.")
@@ -204,13 +211,12 @@ def _validate_config() -> None:
 
 def main() -> None:
     _validate_config()
-    app = Application.builder().token(config.BOT_TOKEN).build()
+    app = Application.builder().token(config.BOT_TOKEN).post_init(on_startup).build()
 
     app.add_handler(CommandHandler("attend", cmd_attend))
     app.add_handler(CallbackQueryHandler(cb_attend, pattern=f"^{ATTEND_CB_DATA}$"))
     app.add_handler(CommandHandler("status", cmd_status))
 
-    app.post_init = on_startup
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
