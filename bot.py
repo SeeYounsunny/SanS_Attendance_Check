@@ -172,7 +172,7 @@ async def _require_allowed(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     return True
 
 
-async def cmd_attend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def handle_attend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await _require_allowed(update, context):
         return
     svc: AttendanceService | None = context.application.bot_data.get("attendance_service")
@@ -192,7 +192,12 @@ async def cmd_attend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await _reply_alert(update, res.message_for_user)
         return
 
-    await _reply_alert(update, res.message_for_user)
+    # 성공: 단체방에 메시지 없음. 버튼은 상단 짧은 알림만(채팅에 남지 않음).
+    if update.callback_query:
+        try:
+            await update.callback_query.answer(text="출석되었습니다.")
+        except TelegramError:
+            pass
 
     if not res.should_update_message or not res.render:
         return
@@ -214,8 +219,7 @@ async def cmd_attend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 
 async def cb_attend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # Treat inline button as /attend
-    await cmd_attend(update, context)
+    await handle_attend(update, context)
 
 
 async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -394,8 +398,7 @@ async def cmd_open(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not config.DEV_MODE:
         return
     await session_open(context.application)
-    if update.message:
-        await update.message.reply_text("세션을 열었습니다. 이제 /attend 로 테스트해 보세요.")
+    # 단체방에 답장 없음(오픈 안내·명단 메시지만 전송). 상단 토스트는 명령에는 불가.
 
 
 async def cmd_close(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -404,8 +407,7 @@ async def cmd_close(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not config.DEV_MODE:
         return
     await session_close(context.application)
-    if update.message:
-        await update.message.reply_text("세션을 종료했습니다.")
+    # 답장 없음(종료 처리·안내 메시지만 그룹에 전송됨).
 
 
 async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -496,7 +498,6 @@ def main() -> None:
     _validate_config()
     app = Application.builder().token(config.BOT_TOKEN).post_init(on_startup).build()
 
-    app.add_handler(CommandHandler("attend", cmd_attend))
     app.add_handler(CallbackQueryHandler(cb_attend, pattern=f"^{ATTEND_CB_DATA}$"))
     app.add_handler(CommandHandler("status", cmd_status))
     app.add_handler(CommandHandler("guide", cmd_guide))

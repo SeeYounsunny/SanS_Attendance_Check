@@ -13,8 +13,7 @@ def render_session_open(start_hour: int, end_hour: int) -> str:
     return (
         "📋 [출석체크 시작]\n"
         f"금일 세션 출석체크가 시작되었습니다. (오후 {start_hour}시 ~ {end_hour}시)\n"
-        "아래 /attend 를 눌러 출석해 주세요!\n\n"
-        "/attend"
+        "아래 출석 버튼을 눌러 출석해 주세요!"
     )
 
 
@@ -38,7 +37,7 @@ def render_attendance_progress(
         return MessageRender(text="\n".join(lines), is_complete=True)
 
     if include_attend_cta:
-        lines.append("/attend")
+        lines.append("아래 출석 버튼을 눌러주세요.")
     return MessageRender(text="\n".join(lines), is_complete=False)
 
 
@@ -61,7 +60,7 @@ def render_guide(
         f"- 출석 가능 시간: {time_line}\n"
         f"- 목표 인원: {max_attendees}명\n\n"
         "✅ 출석하기\n"
-        "- 단체방에서 `/attend` 입력 또는 출석 메시지의 버튼을 클릭하세요.\n\n"
+        "- 단체방의 출석 현황 메시지에서 출석 버튼을 누르세요.\n\n"
         "📋 현황 보기\n"
         "- `/status` 로 현재 출석 현황을 다시 볼 수 있어요.\n\n"
         "ℹ️ 안내 메시지\n"

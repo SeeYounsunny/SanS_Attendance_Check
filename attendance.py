@@ -103,7 +103,7 @@ class AttendanceService:
 
             return AttendResult(
                 ok=True,
-                message_for_user="출석이 완료되었습니다!",
+                message_for_user="",  # 봇이 단체방에 보내지 않음; 명단 edit만 갱신
                 should_update_message=True,
                 render=render,
             )
