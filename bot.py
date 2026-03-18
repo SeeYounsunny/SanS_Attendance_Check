@@ -144,12 +144,25 @@ async def _is_group_member_cached(update: Update, context: ContextTypes.DEFAULT_
 async def _require_allowed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     """
     Access control:
-    - Commands are allowed only for members of GROUP_CHAT_ID.
-    - In group chats: also require the chat itself to be GROUP_CHAT_ID.
+    - Only in the configured group/supergroup (no 1:1 / private chat).
+    - User must be a member of that group.
     """
     chat = update.effective_chat
-    if chat and chat.type in {"group", "supergroup"} and chat.id != config.GROUP_CHAT_ID:
-        await _reply_alert(update, "이 봇은 지정된 단체방에서만 사용할 수 있어요.")
+    if not chat:
+        return False
+
+    if chat.type == "private":
+        await _reply_alert(
+            update,
+            "출석·명령은 1:1 대화가 아니라 단체방에서만 사용할 수 있어요.",
+        )
+        return False
+
+    if chat.type not in {"group", "supergroup"} or chat.id != config.GROUP_CHAT_ID:
+        if chat.type in {"group", "supergroup"}:
+            await _reply_alert(update, "이 봇은 지정된 단체방에서만 사용할 수 있어요.")
+        else:
+            await _reply_alert(update, "출석·명령은 단체방에서만 사용할 수 있어요.")
         return False
 
     if not await _is_group_member_cached(update, context):
