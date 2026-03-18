@@ -23,7 +23,10 @@ def render_attendance_progress(
     include_attend_cta: bool,
 ) -> MessageRender:
     n = len(names)
-    header = f"📋 출석 현황 ({n}/{max_attendees})"
+    denom = max(max_attendees, 1)
+    pct = int(round((n / denom) * 100))
+    pct = max(0, min(100, pct))
+    header = f"📋 출석 현황 (참석률 {pct}%)"
 
     lines: list[str] = [header, ""]
     for idx, name in enumerate(names, start=1):
@@ -33,7 +36,7 @@ def render_attendance_progress(
 
     is_complete = n >= max_attendees
     if is_complete:
-        lines.append("✅ 완료 - 전원 출석!")
+        lines.append("✅ 완료 - 전원 출석! 오늘도 수고 많으셨어요!")
         return MessageRender(text="\n".join(lines), is_complete=True)
 
     if include_attend_cta:
