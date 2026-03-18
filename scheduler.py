@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -78,5 +78,5 @@ def build_scheduler(
 
 
 def now_utc() -> datetime:
-    return datetime.utcnow().replace(tzinfo=ZoneInfo("UTC"))
+    return datetime.now(timezone.utc)
 

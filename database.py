@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Any
 
 import aiosqlite
@@ -70,7 +70,12 @@ CREATE INDEX IF NOT EXISTS idx_attendances_session_order ON attendances(session_
 
 
 def _iso_now(dt: datetime | None = None) -> str:
-    return (dt or datetime.utcnow()).replace(microsecond=0).isoformat() + "Z"
+    if dt is None:
+        d = datetime.now(timezone.utc)
+    else:
+        d = dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+        d = d.astimezone(timezone.utc)
+    return d.replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 async def init_db(db_path: str) -> None:

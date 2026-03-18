@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
@@ -34,6 +34,9 @@ from scheduler import build_scheduler
 
 
 logging.basicConfig(level=logging.INFO)
+# 텔레그램 HTTP 요청 URL에 토큰이 포함되므로 httpx INFO 로그 비활성화
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 logger = logging.getLogger("attendance-bot")
 
 
@@ -96,7 +99,7 @@ async def _edit_or_fallback(
 
 
 def _utc_now() -> datetime:
-    return datetime.utcnow().replace(tzinfo=ZoneInfo("UTC"))
+    return datetime.now(timezone.utc)
 
 
 def _local_today() -> date:
@@ -114,7 +117,7 @@ def _month_range(d: date) -> tuple[date, date]:
 
 
 def _now_ts() -> float:
-    return datetime.utcnow().timestamp()
+    return datetime.now(timezone.utc).timestamp()
 
 
 async def _is_group_member_cached(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
