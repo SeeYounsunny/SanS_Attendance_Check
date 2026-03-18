@@ -490,9 +490,16 @@ async def on_startup(app: Application) -> None:
     await init_db(config.DB_PATH)
     app.bot_data["attendance_service"] = AttendanceService(config.DB_PATH)
 
+    # APScheduler jobs may run in a worker thread (default executor).
+    # Ensure our async session_open/session_close always execute on the main asyncio loop.
+    loop = asyncio.get_running_loop()
+
+    def _run_on_loop(coro) -> None:
+        asyncio.run_coroutine_threadsafe(coro, loop)
+
     scheduler = build_scheduler(
-        on_open=lambda: app.create_task(session_open(app)),
-        on_close=lambda: app.create_task(session_close(app)),
+        on_open=lambda: _run_on_loop(session_open(app)),
+        on_close=lambda: _run_on_loop(session_close(app)),
     )
     scheduler.start()
     app.bot_data["scheduler"] = scheduler
