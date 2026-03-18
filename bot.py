@@ -278,7 +278,6 @@ async def cmd_guide(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         open_hour=config.SESSION_OPEN_HOUR,
         open_minute=config.SESSION_OPEN_MINUTE,
         max_attendees=config.MAX_ATTENDEES,
-        dev_mode=config.DEV_MODE,
     )
     if update.message:
         await update.message.reply_text(text)
@@ -424,24 +423,6 @@ async def cmd_top10(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         lines.append(f"{i}. {r.user_name} — {r.attendee_count}회")
     await update.message.reply_text("\n".join(lines))
 
-async def cmd_open(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not await _require_allowed(update, context):
-        return
-    if not config.DEV_MODE:
-        return
-    await session_open(context.application)
-    # 단체방에 답장 없음(오픈 안내·명단 메시지만 전송). 상단 토스트는 명령에는 불가.
-
-
-async def cmd_close(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not await _require_allowed(update, context):
-        return
-    if not config.DEV_MODE:
-        return
-    await session_close(context.application)
-    # 답장 없음(종료 처리·안내 메시지만 그룹에 전송됨).
-
-
 async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Delete all attendance/session data. Requires RESET_PASSWORD env to be set and matching."""
     if not await _require_allowed(update, context):
@@ -538,8 +519,6 @@ def main() -> None:
     app.add_handler(CommandHandler("history", cmd_history))
     app.add_handler(CommandHandler("search", cmd_search))
     app.add_handler(CommandHandler("top10", cmd_top10))
-    app.add_handler(CommandHandler("open", cmd_open))
-    app.add_handler(CommandHandler("close", cmd_close))
     app.add_handler(CommandHandler("reset", cmd_reset))
 
     app.run_polling(allowed_updates=Update.ALL_TYPES)

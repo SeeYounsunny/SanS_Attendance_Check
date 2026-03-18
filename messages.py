@@ -49,11 +49,8 @@ def render_guide(
     open_hour: int,
     open_minute: int,
     max_attendees: int,
-    dev_mode: bool,
 ) -> str:
     time_line = f"일요일 {open_hour:02d}:{open_minute:02d} ~ {end_hour:02d}:00 ({timezone})"
-    if dev_mode:
-        time_line = f"{time_line}\n(DEV_MODE=1: 시간 제한 없이 테스트 가능)"
 
     return (
         "📌 출석체크 사용법\n\n"
