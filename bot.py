@@ -15,7 +15,9 @@ import config
 from attendance import AttendanceService, format_display_name, week_date_for
 from database import (
     get_active_session,
+    get_session_by_week_date,
     init_db,
+    list_attendances,
     list_attendances_for_sessions,
     list_monthly_attendance_counts,
     list_sessions_between,
@@ -234,6 +236,33 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await update.message.reply_text("현재 활성화된 세션이 없습니다.")
         return
     await update.message.reply_text(render.text, reply_markup=_attend_keyboard(not render.is_complete))
+
+
+async def cmd_result(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """오늘(타임존 기준) 세션의 출석 현황."""
+    if not await _require_allowed(update, context):
+        return
+    today = _local_today()
+    week_date_str = today.isoformat()
+    session = await get_session_by_week_date(config.DB_PATH, week_date_str)
+    if not session:
+        if update.message:
+            await update.message.reply_text(
+                f"📋 오늘({week_date_str})에는 아직 출석 세션이 없습니다.\n"
+                "세션이 열린 뒤 다시 확인해 주세요."
+            )
+        return
+    rows = await list_attendances(config.DB_PATH, session.id)
+    names = [r.user_name for r in rows]
+    render = render_attendance_progress(names, config.MAX_ATTENDEES, include_attend_cta=False)
+    status_ko = {
+        "active": "진행 중",
+        "completed": "목표 달성(완료)",
+        "ended": "세션 종료",
+    }.get(session.status, session.status)
+    header = f"📋 오늘 출석 현황 ({week_date_str}) · {status_ko}\n\n"
+    if update.message:
+        await update.message.reply_text(header + render.text, disable_web_page_preview=True)
 
 
 async def cmd_guide(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -500,6 +529,7 @@ def main() -> None:
 
     app.add_handler(CallbackQueryHandler(cb_attend, pattern=f"^{ATTEND_CB_DATA}$"))
     app.add_handler(CommandHandler("status", cmd_status))
+    app.add_handler(CommandHandler("result", cmd_result))
     app.add_handler(CommandHandler("guide", cmd_guide))
     app.add_handler(CommandHandler("stats", cmd_stats))
     app.add_handler(CommandHandler("history", cmd_history))
