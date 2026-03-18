@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
 import logging
 from datetime import date, datetime, timedelta
 
@@ -19,6 +20,7 @@ from database import (
     list_monthly_attendance_counts,
     list_sessions_between,
     list_sessions_recent,
+    reset_all_data,
     top_attendees_between,
     count_user_attendances_between,
     upsert_session_active,
@@ -393,6 +395,24 @@ async def cmd_close(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("세션을 종료했습니다.")
 
 
+async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Delete all attendance/session data. Requires RESET_PASSWORD env to be set and matching."""
+    if not await _require_allowed(update, context):
+        return
+    if not config.RESET_PASSWORD:
+        await _reply_alert(update, "데이터 초기화 기능이 비활성화되어 있습니다.")
+        return
+    args = (context.args or [])
+    if len(args) != 1:
+        await _reply_alert(update, "사용법: /reset <비밀번호>")
+        return
+    if not hmac.compare_digest(config.RESET_PASSWORD, args[0]):
+        await _reply_alert(update, "비밀번호가 올바르지 않습니다.")
+        return
+    await reset_all_data(config.DB_PATH)
+    await _reply_alert(update, "모든 출석·세션 데이터가 삭제되었습니다.")
+
+
 async def session_open(app: Application) -> None:
     chat_id = config.GROUP_CHAT_ID
     now = _utc_now()
@@ -473,6 +493,7 @@ def main() -> None:
     app.add_handler(CommandHandler("top10", cmd_top10))
     app.add_handler(CommandHandler("open", cmd_open))
     app.add_handler(CommandHandler("close", cmd_close))
+    app.add_handler(CommandHandler("reset", cmd_reset))
 
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 

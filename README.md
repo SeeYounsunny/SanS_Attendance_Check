@@ -64,6 +64,10 @@ export SESSION_START_HOUR="21"
 
 # DB 경로
 export DB_PATH="data/attendance.db"
+
+# 데이터 초기화(/reset) 비밀번호. 설정하지 않으면 /reset 명령 비활성화.
+# 비밀번호는 환경변수로만 관리되며, 코드·로그·응답에 노출되지 않습니다.
+export RESET_PASSWORD="your-secret-reset-password"
 ```
 
 > 참고: 출석 인정 시간은 **`SESSION_OPEN_*` ~ `SESSION_END_*`** 입니다.
@@ -84,6 +88,7 @@ python bot.py
 - `/history month`: 지난달(이전 달) 출석 현황
 - `/search <이름>`: 특정 이름 출석 현황 (최근 30일/1년)
 - `/top10` / `/top10 month`: 출석 TOP10 (최근 1년 / 최근 30일)
+- `/reset <비밀번호>`: 모든 출석·세션 데이터 삭제 (배포 전 테스트용). `RESET_PASSWORD` 환경변수를 설정한 경우에만 사용 가능하며, 비밀번호는 환경변수로만 관리되고 외부에 노출되지 않습니다.
 
 ## 메시지 동작
 
@@ -112,6 +117,7 @@ DB 파일은 기본적으로 `data/attendance.db`에 생성됩니다.
 
 - 봇을 단체방에 초대 후 **메시지 전송/편집 권한**이 있는지 확인하세요.
 - 서버 배포 시 프로세스가 항상 살아있어야 스케줄이 동작합니다. (예: systemd, Docker, pm2 등)
+- 배포 전 다른 단체방에서 테스트한 뒤, 실제 배포 전에 `/reset <비밀번호>`로 데이터를 초기화할 수 있습니다. 비밀번호는 Railway 등에서 `RESET_PASSWORD` 환경변수로만 설정하고, 코드·로그에는 절대 노출되지 않도록 합니다.
 
 ## 테스트 모드 (DEV_MODE)
 

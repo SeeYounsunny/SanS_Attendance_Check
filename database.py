@@ -82,6 +82,14 @@ async def init_db(db_path: str) -> None:
         await db.commit()
 
 
+async def reset_all_data(db_path: str) -> None:
+    """Delete all sessions and attendances. Use for pre-deploy test cleanup."""
+    async with aiosqlite.connect(db_path) as db:
+        await db.execute("DELETE FROM attendances")
+        await db.execute("DELETE FROM sessions")
+        await db.commit()
+
+
 async def get_session_by_week_date(db_path: str, week_date: str) -> SessionRow | None:
     async with aiosqlite.connect(db_path) as db:
         db.row_factory = aiosqlite.Row
