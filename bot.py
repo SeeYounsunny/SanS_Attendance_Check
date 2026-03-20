@@ -376,28 +376,6 @@ async def cmd_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     await update.message.reply_text("\n".join(lines))
 
 
-async def cmd_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not await _require_allowed(update, context):
-        return
-    if not context.args:
-        await update.message.reply_text("사용법: /search <이름 일부>\n예: /search 홍길동")
-        return
-    q = " ".join(context.args).strip()
-    today = _local_today()
-    start_30 = today - timedelta(days=30)
-    start_365 = today - timedelta(days=365)
-
-    s30, a30 = await count_user_attendances_between(config.DB_PATH, q, start_30, today)
-    s365, a365 = await count_user_attendances_between(config.DB_PATH, q, start_365, today)
-
-    text = (
-        f"🔎 출석 검색: `{q}`\n\n"
-        f"- 최근 30일: {s30}회 세션 / {a30}건 출석\n"
-        f"- 최근 1년: {s365}회 세션 / {a365}건 출석"
-    )
-    await update.message.reply_text(text)
-
-
 async def cmd_top10(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await _require_allowed(update, context):
         return
@@ -432,7 +410,7 @@ async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     args = (context.args or [])
     if len(args) != 1:
-        await _reply_alert(update, "사용법: /reset <비밀번호>")
+        await _reply_alert(update, "사용법: /resetdata <비밀번호>")
         return
     if not hmac.compare_digest(config.RESET_PASSWORD, args[0]):
         await _reply_alert(update, "비밀번호가 올바르지 않습니다.")
@@ -524,9 +502,8 @@ def main() -> None:
     app.add_handler(CommandHandler("guide", cmd_guide))
     app.add_handler(CommandHandler("stats", cmd_stats))
     app.add_handler(CommandHandler("history", cmd_history))
-    app.add_handler(CommandHandler("search", cmd_search))
     app.add_handler(CommandHandler("top10", cmd_top10))
-    app.add_handler(CommandHandler("reset", cmd_reset))
+    app.add_handler(CommandHandler("resetdata", cmd_reset))
 
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 

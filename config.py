@@ -29,7 +29,7 @@ TIMEZONE = _get_env("TIMEZONE", "Asia/Seoul") or "Asia/Seoul"
 # Storage
 DB_PATH = _get_env("DB_PATH", "data/attendance.db") or "data/attendance.db"
 
-# Reset data password: required for /reset command. If not set, /reset is disabled.
+# Reset data password: required for /resetdata command. If not set, /resetdata is disabled.
 # Stored only in env; never logged or exposed in responses.
 RESET_PASSWORD = _get_env("RESET_PASSWORD", "") or ""
 
